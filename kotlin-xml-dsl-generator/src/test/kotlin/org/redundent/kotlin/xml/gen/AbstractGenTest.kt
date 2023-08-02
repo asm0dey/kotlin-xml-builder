@@ -29,7 +29,7 @@ abstract class AbstractGenTest {
 			val bindingFile = File.createTempFile("binding", ".jxb").apply {
 				writer().use { writer ->
 					binding.reader().forEachLine { line ->
-						writer.appendln(line.replace("@schema@", "file:/${file.absolutePath}"))
+						writer.appendLine(line.replace("@schema@", "file:/${file.absolutePath}"))
 					}
 				}
 			}
@@ -37,7 +37,7 @@ abstract class AbstractGenTest {
 			opts.addBindFile(bindingFile)
 		}
 
-		val text = cleanText(DslGenerator(opts).generate().replace(System.lineSeparator(), "\n"))
+		val text = cleanText(DslGenerator(opts).generate().toString().replace(System.lineSeparator(), "\n"))
 
 		assertEquals(code, text, "generated code is not the same")
 	}
