@@ -77,66 +77,84 @@ class XmlElement(
     fun toFunSpec(outline: Outline): FunSpec {
         val rootElement = parent == null
         val functionBuilder = FunSpec.builder(name)
-        if (documentation != null)
-            functionBuilder.addKdoc("%L", documentation.trimIndent())
-        if (!rootElement) functionBuilder.receiver(ClassName.bestGuess(parent!!.shortName))
-        if (type is CClassInfo && type.hasOptionalAttributes) functionBuilder.addAnnotation(JvmOverloads::class)
-        if (type is CClassInfo) {
-            val blockParamType = type.fullName()
-            val sortedS = type.allAttributes.sortedWith(compareBy({ !it.isRequired }, { it.xmlName.localPart }))
-            for (sorted in sortedS) {
-                if (functionBuilder.parameters.any { it.name == sorted.xmlName.localPart }) continue
-                val field = outline.getField(sorted)
-                val parameterSpec = ParameterSpec.builder(
-                    sorted.xmlName.localPart,
-                    mapType(field.rawType.fullName()).copy(nullable = !sorted.isRequired)
-                )
-                if (!sorted.isRequired) parameterSpec.defaultValue("%L", null)
-                functionBuilder.addParameter(parameterSpec.build())
+        return `fun`(name) {
+            if (documentation != null) kdoc(documentation.trimIndent())
+            if (!rootElement) receiver(ClassName.bestGuess(parent!!.shortName))
+            if (type is CClassInfo && type.hasOptionalAttributes) addAnnotation(JvmOverloads::class)
+            if (type !is CClassInfo) {
+                val t = mapType(type.type.fullName())
+                addParameter("value", t)
+                val toString = if (t != String::class.asTypeName()) ".toString()" else ""
+                addStatement("%S(%L$toString)", tagName, "value")
+                return@`fun`
             }
-            val lambda = LambdaTypeName.get(ClassName.bestGuess(blockParamType), listOf(), Unit::class.asTypeName())
-            functionBuilder.addParameter(ParameterSpec.builder("block", lambda).defaultValue("{}").build())
-            if (type.parent() is CClassInfo) functionBuilder.addStatement("val %N = %T()", tagName, ClassName.bestGuess(type.fullName()))
-            else functionBuilder.addStatement("val %N = %T(%S)", tagName, ClassName.bestGuess(type.fullName()), tagName)
+            val sortedAttributes =
+                type.allAttributes
+                    .distinctBy { it.xmlName.localPart }
+                    .sortedWith(compareBy({ !it.isRequired }, { it.xmlName.localPart }))
+            for (attr in sortedAttributes) {
+                val paramName = attr.xmlName.localPart
+                if (functionBuilder.parameters.any { it.name == paramName }) continue
+                val field = outline.getField(attr)
+                val paramType = mapType(field.rawType.fullName()).copy(nullable = !attr.isRequired)
+                parameter(paramName, paramType) {
+                    if (!attr.isRequired) defaultValue("%L", null)
+                }
+            }
+            val lambdaType = LambdaTypeName.get(ClassName.bestGuess(type.fullName()), listOf(), Unit::class.asTypeName())
+            parameter("block", lambdaType) { defaultValue("{}") }
+            if (type.parent() is CClassInfo)
+                addStatement("val %N = %T()", tagName, ClassName.bestGuess(type.fullName()))
+            else
+                addStatement("val %N = %T(%S)", tagName, ClassName.bestGuess(type.fullName()), tagName)
             if (type.allAttributes.isNotEmpty()) {
-                functionBuilder.addCode(buildCodeBlock {
-
-                    this.beginControlFlow("%N.apply", tagName)
-                    for (attr in type.allAttributes.distinctBy { it.xmlName.localPart }) {
-                        val attrName = attr.xmlName.localPart
-                        if (!attr.isRequired) {
-                            this.addStatement(
-                                "if (%1L != null) this.%2L = %1L",
-                                attrName,
-                                if (attrName == "version") "xVersion" else attrName
-                            )
-                        } else {
-                            this.addStatement("this.%1L = %1L", attrName)
-                        }
-                    }
-                    this.endControlFlow()
-                })
+                addCode(applyParameters(type))
             }
-            functionBuilder.addStatement("%N.block()", tagName)
+            addStatement("%N.block()", tagName)
 
             if (rootElement) {
-                functionBuilder.returns(ClassName.bestGuess(type.fullName()))
-                functionBuilder.addStatement("return %N", tagName)
+                returns(ClassName.bestGuess(type.fullName()))
+                addStatement("return %N", tagName)
             } else {
-                functionBuilder.addStatement("this.addNode(%L)", tagName)
+                addStatement("this.addNode(%L)", tagName)
             }
-
-        } else {
-            val t = mapType(type.type.fullName())
-            functionBuilder.addParameter("value", t)
-            functionBuilder.addStatement(
-                "%S(%L${if (t != String::class.asTypeName()) ".toString()" else ""})",
-                tagName,
-                "value",
-            )
         }
-        return functionBuilder.build()
     }
+
+    private fun applyParameters(type: CClassInfo) = buildCodeBlock {
+        controlFlow("%N.apply", tagName) {
+            for (attr in type.allAttributes.distinctBy { it.xmlName.localPart }) {
+                val attrName = attr.xmlName.localPart
+                if (!attr.isRequired) {
+                    addStatement(
+                        "if (%1L != null) this.%2L = %1L",
+                        attrName,
+                        if (attrName == "version") "xVersion" else attrName
+                    )
+                } else {
+                    addStatement("this.%1L = %1L", attrName)
+                }
+            }
+        }
+    }
+}
+
+fun CodeBlock.Builder.controlFlow(controlFlow: String, vararg args: Any?, block: CodeBlock.Builder.() -> Unit) {
+    beginControlFlow(controlFlow, *args)
+    block()
+    endControlFlow()
+}
+
+private fun FunSpec.Builder.parameter(name: String, type: TypeName, block: ParameterSpec.Builder.() -> Unit) {
+    addParameter(ParameterSpec.builder(name, type).apply(block).build())
+}
+
+private fun FunSpec.Builder.kdoc(s: String) {
+    addKdoc(CodeBlock.of("%L", s))
+}
+
+fun `fun`(funName: String, block: FunSpec.Builder.() -> Unit): FunSpec {
+    return FunSpec.builder(funName).apply(block).build()
 }
 
 fun mapType(type: String): TypeName {

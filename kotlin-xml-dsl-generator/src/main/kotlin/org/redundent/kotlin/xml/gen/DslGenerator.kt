@@ -24,9 +24,7 @@ fun main(args: Array<String>) {
 
         output.parentFile.mkdirs()
 
-        output.writer().use {
-            generated.writeTo(it)
-        }
+        generated.writeTo(opts.targetDir)
     } catch (e: BadCommandLineException) {
         // there was an error in the command line.
         // print usage and abort.
@@ -71,7 +69,7 @@ class DslGenerator(private val opts: ExOptions) {
         ).toTypedArray()
 
         val fileBuilder = FileSpec
-            .builder(opts.defaultPackage, "tmp.kt")
+            .builder(opts.defaultPackage, "schema")
         fileBuilder.addAnnotation(
             AnnotationSpec.builder(Suppress::class)
                 .useSiteTarget(FILE)

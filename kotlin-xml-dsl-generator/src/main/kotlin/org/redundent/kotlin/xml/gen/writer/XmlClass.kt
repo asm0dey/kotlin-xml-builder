@@ -167,16 +167,7 @@ init {
             for (attribute in attributes.distinctBy { it.name }.sortedBy { it.name }) {
                 val classNameString = attribute.type.replace("?", "")
                 val type = ClassName.bestGuess(classNameString).copy(nullable = true)
-                typeSpecBuilder.addProperty(
-                    PropertySpec.builder(if (attribute.name == "version") "xVersion" else attribute.name, type)
-                        .mutable()
-                        .getter(FunSpec.getterBuilder().addStatement("return get(%S)", attribute.name).build())
-                        .setter(
-                            FunSpec.setterBuilder().addParameter("new", type)
-                                .addStatement("set(%S, new)", attribute.name).build()
-                        )
-                        .build()
-                )
+                typeSpecBuilder.addProperty(buildProperty(attribute, type))
             }
         }
         if (opts.useMemberFunctions) {
@@ -194,4 +185,37 @@ init {
 
         return listOfNotNull(typeSpecBuilder.build(), *memberSpecs.toTypedArray(), rootFunSpec)
     }
+
+    private fun buildProperty(
+        attribute: XmlAttribute,
+        type: TypeName
+    ): PropertySpec {
+        // Need to workaround the conflict with Node.version
+        val propName = if (attribute.name == "version") "xVersion" else attribute.name
+        return property(propName, type) {
+            mutable()
+            getter {
+                addStatement("return get(%S)", attribute.name)
+            }
+            setter {
+                addParameter("new", type)
+                addStatement("return set(%S, new)", attribute.name)
+            }
+        }
+    }
+}
+
+fun PropertySpec.Builder.setter(block: FunSpec.Builder.() -> Unit): PropertySpec.Builder =
+    setter(FunSpec.setterBuilder().apply(block).build())
+
+fun PropertySpec.Builder.getter(block: FunSpec.Builder.() -> Unit): PropertySpec.Builder =
+    getter(FunSpec.getterBuilder().apply(block).build())
+
+fun property(
+    name: String,
+    type: TypeName,
+    vararg modifiers: KModifier,
+    block: PropertySpec.Builder.() -> Unit
+): PropertySpec {
+    return PropertySpec.builder(name, type, *modifiers).apply(block).build()
 }

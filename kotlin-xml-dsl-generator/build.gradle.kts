@@ -32,6 +32,8 @@ dependencies {
 	implementation("com.sun.xml.bind:jaxb-impl:4.0.3")
 	implementation("org.glassfish.jaxb:jaxb-xjc:4.0.3")
 	implementation("org.relaxng:jing:20220510")
+	// xerces without known vulnerabilities
+	implementation("xerces:xercesImpl:2.12.2")
 	implementation("com.squareup:kotlinpoet:1.14.2")
 
 	implementation(project(":kotlin-xml-builder"))
