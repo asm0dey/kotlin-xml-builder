@@ -141,34 +141,20 @@ init {
         }
 
         if (clazz.superClass?.target != null) {
-            typeSpecBuilder.superclass(
-                ClassName(
-                    clazz.superClass.target.ownerPackage.name(),
-                    clazz.superClass.target.shortName
-                )
-            )
-            if (!innerClass)
-                typeSpecBuilder.addSuperclassConstructorParameter("%L", "nodeName")
-            else
-                typeSpecBuilder.addSuperclassConstructorParameter("%S", name)
+            typeSpecBuilder.superclass(ClassName.bestGuess(clazz.superClass.target.fullName()))
         } else {
             typeSpecBuilder.superclass(Node::class)
-            if (!innerClass)
-                typeSpecBuilder.addSuperclassConstructorParameter("%L", "nodeName")
-            else
-                typeSpecBuilder.addSuperclassConstructorParameter("%S", name)
         }
+        if (!innerClass)
+            typeSpecBuilder.addSuperclassConstructorParameter("%L", "nodeName")
+        else
+            typeSpecBuilder.addSuperclassConstructorParameter("%S", name)
         if (clazz.target.isOrdered && clazz.target.elements.size > 1) {
             typeSpecBuilder.addAnnotation(
                 AnnotationSpec.builder(XmlType::class).addMember(buildCodeBlock {
-                    val elements = clazz.target.elements.map { it.types.first().tagName.localPart }
-                    add("childOrder = [")
-                    for ((index, element) in elements.withIndex()) {
-                        add("%S", element)
-                        if (index < elements.indices.last) add(", ")
-                    }
-                    add("]")
-
+                    val elements = clazz.target.elements.map { it.types.first().tagName.localPart }.toTypedArray()
+                    val template = elements.joinToString(", ") { "%S" }
+                    add("childOrder = [$template]", *elements)
                 }).build()
             )
         }
